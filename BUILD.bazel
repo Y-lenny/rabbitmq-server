@@ -1,0 +1,146 @@
+load("@bazel-erlang//:dialyze.bzl", "plt")
+load("@bazel-erlang//:shell.bzl", "shell")
+load("elixir_home.bzl", "elixir_home")
+load(":rabbitmq_home.bzl", "rabbitmq_home")
+load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
+load(":rabbitmqctl.bzl", "rabbitmqctl")
+
+exports_files([
+    "scripts/bazel/rabbitmq-run.sh",
+])
+
+# This allows us to
+# `bazel build //my/target \
+#    --//:elixir_home=/path/to/elixir/installation`
+elixir_home(
+    name = "elixir_home",
+    build_setting_default = "~/.kiex/elixirs/elixir-1.10.4",
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "erlang_23_platform",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = {
+        "OSFamily": "Linux",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:1a0335f16ae7e91559441f5b831d0809907fc38743ba66b23b980b77b1d3c33e",
+    },
+)
+
+platform(
+    name = "erlang_24_platform",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = {
+        "OSFamily": "Linux",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:09d379e889dedfa492736584721d74e580d35b31ee2b3f996320872d1f76505e",
+    },
+)
+
+plt(
+    name = "base_plt",
+    visibility = ["//visibility:public"],
+)
+
+ALL_PLUGINS = [
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_cache:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_http:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_ldap:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_oauth2:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_mechanism_ssl:bazel_erlang_lib",
+    "//deps/rabbitmq_consistent_hash_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_event_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_federation:bazel_erlang_lib",
+    "//deps/rabbitmq_federation_management:bazel_erlang_lib",
+    "//deps/rabbitmq_jms_topic_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_management:bazel_erlang_lib",
+    "//deps/rabbitmq_mqtt:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_aws:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_consul:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_etcd:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_k8s:bazel_erlang_lib",
+    "//deps/rabbitmq_prometheus:bazel_erlang_lib",
+    "//deps/rabbitmq_random_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_recent_history_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_sharding:bazel_erlang_lib",
+    "//deps/rabbitmq_shovel:bazel_erlang_lib",
+    "//deps/rabbitmq_shovel_management:bazel_erlang_lib",
+    "//deps/rabbitmq_stomp:bazel_erlang_lib",
+    "//deps/rabbitmq_stream:bazel_erlang_lib",
+    "//deps/rabbitmq_stream_management:bazel_erlang_lib",
+    "//deps/rabbitmq_top:bazel_erlang_lib",
+    "//deps/rabbitmq_tracing:bazel_erlang_lib",
+    "//deps/rabbitmq_trust_store:bazel_erlang_lib",
+    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+    "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
+    "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
+]
+
+rabbitmq_home(
+    name = "broker-home",
+    plugins = ALL_PLUGINS,
+)
+
+rabbitmq_home(
+    name = "broker-for-cli-tests-home",
+    testonly = True,
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbitmq_federation:bazel_erlang_lib",
+        "//deps/rabbitmq_stomp:bazel_erlang_lib",
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-run",
+    home = ":broker-home",
+    visibility = ["//visibility:public"],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-cli-tests-run",
+    testonly = True,
+    home = ":broker-for-cli-tests-home",
+    visibility = ["//visibility:public"],
+)
+
+# Allow us to `bazel run broker`
+# for the equivalent of `make run-broker`
+# (though it as of yet includes no plugins)
+rabbitmq_run_command(
+    name = "broker",
+    rabbitmq_run = ":rabbitmq-run",
+    subcommand = "run-broker",
+)
+
+# `bazel run rabbitmqctl`
+rabbitmqctl(
+    name = "rabbitmqctl",
+    home = ":broker-home",
+    visibility = ["//visibility:public"],
+)
+
+rabbitmqctl(
+    name = "rabbitmq-diagnostics",
+    home = ":broker-home",
+)
+
+rabbitmqctl(
+    name = "rabbitmq-plugins",
+    home = ":broker-home",
+)
+
+shell(
+    name = "repl",
+    deps = ALL_PLUGINS,
+)
